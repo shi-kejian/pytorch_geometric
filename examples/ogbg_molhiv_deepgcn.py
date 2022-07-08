@@ -122,13 +122,12 @@ for epoch in range(1, 301):
                     'Validation': valid_rocauc,
                     'Test': test_rocauc})
 
-    # if train_rocauc > results['highest_train']:
-    #     results['highest_train'] = train_rocauc
-    # if valid_rocauc > results['highest_valid']:
-    #     results['highest_valid'] = valid_rocauc
-    #     results['final_train'] = train_rocauc
-    #     results['final_test'] = test_rocauc
-
+    if train_rocauc > results['highest_train']:
+        results['highest_train'] = train_rocauc
+    if valid_rocauc > results['highest_valid']:
+        results['highest_valid'] = valid_rocauc
+        results['final_train'] = train_rocauc
+        results['final_test'] = test_rocauc
     #     save_ckpt(model, optimizer,
     #                 round(epoch_loss, 4), epoch,
     #                 args.model_save_path,
