@@ -28,7 +28,7 @@ class DeeperGCN(torch.nn.Module):
         for i in range(1, num_layers + 1):
             conv = GENConv(hidden_channels, hidden_channels, aggr='softmax',
                            t=1.0, learn_t=True, num_layers=7, norm='batch')
-            norm = BatchNorm1d(hidden_channels, elementwise_affine=True)
+            norm = BatchNorm1d(hidden_channels)
             act = ReLU(inplace=True)
             layer = DeepGCNLayer(conv, norm, act, block='res+', dropout=0.2)
             self.layers.append(layer)
