@@ -45,7 +45,7 @@ class DeeperGCN(torch.nn.Module):
     def forward(self, batch_data):
 
         x, edge_index, edge_attr, batch = \
-                    batched_data.x, batched_data.edge_index, batch_data.edge_attr, batched_data.batch
+                    batch_data.x, batch_data.edge_index, batch_data.edge_attr, batch_data.batch
         h = self.atom_encoder(x)
         edge_attr = edge_attr if self.conv_enc_edge else self.bond_encoder(edge_attr)
 
