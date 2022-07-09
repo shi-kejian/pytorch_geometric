@@ -21,7 +21,7 @@ valid_loader = DataLoader(dataset[split_idx["valid"]], batch_size=32, shuffle=Fa
 test_loader = DataLoader(dataset[split_idx["test"]], batch_size=32, shuffle=False, num_workers=2)
 
 class DeeperGCN(torch.nn.Module):
-    def __init__(self, hidden_channels, num_layers, graph_pool='mean', conv_enc_edge=True):
+    def __init__(self, hidden_channels, num_layers, num_tasks, graph_pool='mean', conv_enc_edge=True):
         super().__init__()
         self.conv_enc_edge = conv_enc_edge
         self.layers = torch.nn.ModuleList()
@@ -34,7 +34,7 @@ class DeeperGCN(torch.nn.Module):
             self.layers.append(layer)
 
         self.atom_encoder = AtomEncoder(emb_dim=hidden_channels)
-        self.bond_encoder = BondEncoder(emb_dim=hidden_channels) # unused when default conv_enc_edge=True
+#         self.bond_encoder = BondEncoder(emb_dim=hidden_channels) # unused when default conv_enc_edge=True
 
         self.pool = global_mean_pool if graph_pool == "mean" \
                                      else global_add_pool if graph_pool == "sum" \
@@ -44,14 +44,16 @@ class DeeperGCN(torch.nn.Module):
 
     def forward(self, batch_data):
 
-        x, edge_index, edge_attr, batch = \
-                    batch_data.x, batch_data.edge_index, batch_data.edge_attr, batch_data.batch
+        x, edge_index, batch = \
+                    batch_data.x, batch_data.edge_index, batch_data.batch
         h = self.atom_encoder(x)
-        edge_attr = edge_attr if self.conv_enc_edge else self.bond_encoder(edge_attr)
+#         edge_attr = edge_attr if self.conv_enc_edge else self.bond_encoder(edge_attr)
 
-        h = self.layers[0].conv(h, edge_index, edge_attr)
+#         h = self.layers[0].conv(h, edge_index, edge_attr)
+        h = self.layers[0].conv(h, edge_index)
         for layer in self.layers[1:]:
-            h = layer(h, edge_index, edge_attr)
+#             h = layer(h, edge_index, edge_attr)
+              h = layer(h, edge_index)
 
         h = self.layers[0].act(self.layers[0].norm(h))
         h = F.dropout(h, p=0.2, training=self.training)
@@ -61,7 +63,7 @@ class DeeperGCN(torch.nn.Module):
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = DeeperGCN(hidden_channels=256, num_layers=7).to(device)
+model = DeeperGCN(hidden_channels=256, num_layers=7, num_tasks=dataset.num_tasks).to(device)
 evaluator = Evaluator(name='ogbg-molhiv')
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 criterion = torch.nn.BCEWithLogitsLoss()   
