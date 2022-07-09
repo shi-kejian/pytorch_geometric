@@ -9,37 +9,38 @@ from tqdm.notebook import tqdm
 import logging
 
 
-class DeeperGCN(torch.nn.Module):
-    def __init__(self, hidden_channels, num_layers, num_tasks, graph_pool='mean', conv_enc_edge=True):
+class MolDeeperGCN(torch.nn.Module):
+    def __init__(self, hidden_channels, num_layers, num_tasks, graph_pool='mean'):
         super().__init__()
-        self.conv_enc_edge = conv_enc_edge
+        self.num_layers = num_layers
+        self.atom_encoder = AtomEncoder(emb_dim=hidden_channels)
         self.layers = torch.nn.ModuleList()
-        for i in range(1, num_layers + 1):
+        self.edge_encoders = torch.nn.ModuleList()
+        for i in range(num_layers):
+            self.edge_encoders.append(BondEncoder(emb_dim=hidden_channels))
             conv = GENConv(hidden_channels, hidden_channels, aggr='softmax',
                            t=1.0, learn_t=True, num_layers=1, norm='batch')
-            # note num_layer parameter in GENConv refers to mlp_layer
+                           # notice GENConv num_layer parameter means num_mlp_layer
             norm = BatchNorm1d(hidden_channels)
             act = ReLU(inplace=True)
             layer = DeepGCNLayer(conv, norm, act, block='res+', dropout=0.2)
             self.layers.append(layer)
 
-        from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-        self.atom_encoder = AtomEncoder(emb_dim=hidden_channels)
         self.pool = global_mean_pool if graph_pool == "mean" \
                                      else global_add_pool if graph_pool == "sum" \
                                      else global_max_pool
-    
         self.lin = Linear(hidden_channels, num_tasks)
 
     def forward(self, batch_data):
-
-        x, edge_index, batch = \
-                    batch_data.x, batch_data.edge_index, batch_data.batch
+        x, edge_index, edge_attr, batch = \
+                    batch_data.x, batch_data.edge_index, batch_data.edge_attr, batch_data.batch
         h = self.atom_encoder(x)
-        h = self.layers[0].conv(h, edge_index)
-        for layer in self.layers[1:]:
-              h = layer(h, edge_index)
 
+        edge_embed = self.edge_encoders[0](edge_attr)
+        h = self.layers[0].conv(h, edge_index, edge_embed)
+        for i in range(1, self.num_layers):
+              edge_embed = self.edge_encoders[i](edge_attr)
+              h = self.layers[i](h, edge_index, edge_embed)
         h = self.layers[0].act(self.layers[0].norm(h))
         h = F.dropout(h, p=0.2, training=self.training)
 
@@ -63,7 +64,6 @@ def train(model, device, loader, optimizer, criterion):
             loss_lst.append(loss.item())
     return np.array(loss_lst).mean()
 
-from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
 
 @torch.no_grad()
 def eval(model, device, loader, evaluator):
@@ -84,9 +84,8 @@ def eval(model, device, loader, evaluator):
                   "y_pred": y_pred}
     return evaluator.eval(input_dict)
 
-
-def main():
-    print("in main")
+if __name__ == '__main__':
+    from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
     # Load the dataset 
     dataset = PygGraphPropPredDataset(name='ogbg-molhiv', root='./data')
     split_idx = dataset.get_idx_split()
@@ -96,6 +95,7 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = DeeperGCN(hidden_channels=256, num_layers=7, num_tasks=dataset.num_tasks).to(device)
+#     total_params = sum( param.numel() for param in model.parameters())
     evaluator = Evaluator(name='ogbg-molhiv')
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
     criterion = torch.nn.BCEWithLogitsLoss()   
@@ -105,15 +105,16 @@ def main():
                 'final_test': 0,
                 'highest_train': 0}
 
-    for epoch in range(1, 301):
-        print(epoch)
+    for epoch in range(1,80):
         logging.info("=====Epoch {}".format(epoch))
         logging.info('Training...')
         epoch_loss = train(model, device, train_loader, optimizer, criterion)
+
         logging.info('Evaluating...')
         train_rocauc = eval(model, device, train_loader, evaluator)[dataset.eval_metric]
         valid_rocauc = eval(model, device, valid_loader, evaluator)[dataset.eval_metric]
         test_rocauc = eval(model, device, test_loader, evaluator)[dataset.eval_metric]
+        
 
         logging.info({'Train': train_rocauc,
                         'Validation': valid_rocauc,
@@ -125,11 +126,6 @@ def main():
             results['highest_valid'] = valid_rocauc
             results['final_train'] = train_rocauc
             results['final_test'] = test_rocauc
-        #     save_ckpt(model, optimizer,
-        #                 round(epoch_loss, 4), epoch,
-        #                 args.model_save_path,
-        #                 sub_dir, name_post='valid_best')
         print(results['highest_valid'])
     logging.info("%s" % results)
-
-main()
+    print(results)
