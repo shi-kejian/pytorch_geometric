@@ -16,7 +16,8 @@ class DeeperGCN(torch.nn.Module):
         self.layers = torch.nn.ModuleList()
         for i in range(1, num_layers + 1):
             conv = GENConv(hidden_channels, hidden_channels, aggr='softmax',
-                           t=1.0, learn_t=True, num_layers=7, norm='batch')
+                           t=1.0, learn_t=True, num_layers=1, norm='batch')
+            # note num_layer parameter in GENConv refers to mlp_layer
             norm = BatchNorm1d(hidden_channels)
             act = ReLU(inplace=True)
             layer = DeepGCNLayer(conv, norm, act, block='res+', dropout=0.2)
@@ -128,7 +129,7 @@ def main():
         #                 round(epoch_loss, 4), epoch,
         #                 args.model_save_path,
         #                 sub_dir, name_post='valid_best')
-
+        print(results['highest_valid'])
     logging.info("%s" % results)
 
 main()
