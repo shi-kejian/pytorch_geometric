@@ -1,3 +1,5 @@
+from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
+from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -7,7 +9,6 @@ from torch_geometric.nn import DeepGCNLayer, GENConv
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
 from tqdm.notebook import tqdm
 import logging
-
 
 class MolDeeperGCN(torch.nn.Module):
     def __init__(self, hidden_channels, num_layers, num_tasks, graph_pool='mean'):
@@ -20,7 +21,7 @@ class MolDeeperGCN(torch.nn.Module):
             self.edge_encoders.append(BondEncoder(emb_dim=hidden_channels))
             conv = GENConv(hidden_channels, hidden_channels, aggr='softmax',
                            t=1.0, learn_t=True, num_layers=1, norm='batch')
-                           # notice GENConv num_layer parameter means num_mlp_layer
+                           # GENConv num_layer parameter means num_mlp_layer
             norm = BatchNorm1d(hidden_channels)
             act = ReLU(inplace=True)
             layer = DeepGCNLayer(conv, norm, act, block='res+', dropout=0.2)
@@ -64,7 +65,6 @@ def train(model, device, loader, optimizer, criterion):
             loss_lst.append(loss.item())
     return np.array(loss_lst).mean()
 
-
 @torch.no_grad()
 def eval(model, device, loader, evaluator):
     model.eval()
@@ -85,7 +85,6 @@ def eval(model, device, loader, evaluator):
     return evaluator.eval(input_dict)
 
 if __name__ == '__main__':
-    from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
     # Load the dataset 
     dataset = PygGraphPropPredDataset(name='ogbg-molhiv', root='./data')
     split_idx = dataset.get_idx_split()
@@ -94,8 +93,10 @@ if __name__ == '__main__':
     test_loader = DataLoader(dataset[split_idx["test"]], batch_size=32, shuffle=False, num_workers=2)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = DeeperGCN(hidden_channels=256, num_layers=7, num_tasks=dataset.num_tasks).to(device)
-#     total_params = sum( param.numel() for param in model.parameters())
+    model = MolDeeperGCN(hidden_channels=256, num_layers=7, num_tasks=dataset.num_tasks).to(device)
+    total_params = sum( param.numel() for param in model.parameters())
+    print("=====TOTAL PARAM======:", total_params)
+
     evaluator = Evaluator(name='ogbg-molhiv')
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
     criterion = torch.nn.BCEWithLogitsLoss()   
@@ -104,8 +105,9 @@ if __name__ == '__main__':
                 'final_train': 0,
                 'final_test': 0,
                 'highest_train': 0}
-
+    
     for epoch in range(1,80):
+        print(epoch)
         logging.info("=====Epoch {}".format(epoch))
         logging.info('Training...')
         epoch_loss = train(model, device, train_loader, optimizer, criterion)
@@ -115,7 +117,6 @@ if __name__ == '__main__':
         valid_rocauc = eval(model, device, valid_loader, evaluator)[dataset.eval_metric]
         test_rocauc = eval(model, device, test_loader, evaluator)[dataset.eval_metric]
         
-
         logging.info({'Train': train_rocauc,
                         'Validation': valid_rocauc,
                         'Test': test_rocauc})
