@@ -21,7 +21,7 @@ class MolDeeperGCN(torch.nn.Module):
             self.edge_encoders.append(BondEncoder(emb_dim=hidden_channels))
             conv = GENConv(hidden_channels, hidden_channels, aggr='softmax',
                            t=1.0, learn_t=True, num_layers=1, norm='batch')
-                           # GENConv num_layer parameter means num_mlp_layer
+                           # notice GENConv num_layer parameter means num_mlp_layer
             norm = BatchNorm1d(hidden_channels)
             act = ReLU(inplace=True)
             layer = DeepGCNLayer(conv, norm, act, block='res+', dropout=0.2)
@@ -85,6 +85,7 @@ def eval(model, device, loader, evaluator):
     return evaluator.eval(input_dict)
 
 if __name__ == '__main__':
+    print("inmain")
     # Load the dataset 
     dataset = PygGraphPropPredDataset(name='ogbg-molhiv', root='./data')
     split_idx = dataset.get_idx_split()
@@ -105,7 +106,7 @@ if __name__ == '__main__':
                 'final_train': 0,
                 'final_test': 0,
                 'highest_train': 0}
-    
+    # return 
     for epoch in range(1,80):
         print(epoch)
         logging.info("=====Epoch {}".format(epoch))
@@ -117,6 +118,7 @@ if __name__ == '__main__':
         valid_rocauc = eval(model, device, valid_loader, evaluator)[dataset.eval_metric]
         test_rocauc = eval(model, device, test_loader, evaluator)[dataset.eval_metric]
         
+
         logging.info({'Train': train_rocauc,
                         'Validation': valid_rocauc,
                         'Test': test_rocauc})
